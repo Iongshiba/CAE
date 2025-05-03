@@ -8,6 +8,7 @@ from models.modeling_finetune import _cfg
 from timm.models.registry import register_model
 from timm.models.layers import trunc_normal_ as __call_trunc_normal_
 from models.modeling_cae_helper import *
+from models.trifuse import TriFuse
 
 def trunc_normal_(tensor, mean=0., std=1.):
     __call_trunc_normal_(tensor, mean=mean, std=std, a=-std, b=std)
@@ -21,6 +22,7 @@ class ContextAutoencoderViT(nn.Module):
                  decoder_layer_scale_init_value=0.1, decoder_depth=4, fix_init_weight=False , **kwargs):
         super().__init__()
         self.model_type = kwargs['args'].model_type
+        self.encoder_type = kwargs['encoder']
         if kwargs['args'].regressor_depth != regressor_depth: regressor_depth = kwargs['args'].regressor_depth
         if kwargs['args'].decoder_embed_dim != decoder_embed_dim: decoder_embed_dim = kwargs['args'].decoder_embed_dim
         if kwargs['args'].decoder_depth != decoder_depth: decoder_depth = kwargs['args'].decoder_depth
@@ -28,11 +30,20 @@ class ContextAutoencoderViT(nn.Module):
         print("decoder_embed_dim: ", decoder_embed_dim)
         print("decoder_depth: ", decoder_depth)
 
-        self.encoder = VisionTransformerEncoder(img_size=img_size, patch_size=patch_size, in_chans=in_chans, 
-                 embed_dim=embed_dim, depth=depth,
-                 num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
-                 drop_rate=drop_rate, attn_drop_rate=attn_drop_rate, drop_path_rate=drop_path_rate,
-                 norm_layer=norm_layer, init_values=init_values, attn_head_dim=attn_head_dim, init_std=init_std)
+        if self.encoder_type == "vit":
+            self.encoder = VisionTransformerEncoder(img_size=img_size, patch_size=patch_size, in_chans=in_chans, 
+                    embed_dim=embed_dim, depth=depth,
+                    num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
+                    drop_rate=drop_rate, attn_drop_rate=attn_drop_rate, drop_path_rate=drop_path_rate,
+                    norm_layer=norm_layer, init_values=init_values, attn_head_dim=attn_head_dim, init_std=init_std)
+        elif self.encoder_type == "trifuse":
+            self.encoder = TriFuse(
+                depths=(2, 2, 2, 2),
+                conv_depths=(2, 2, 2, 2),
+                fpn_dim=192,  # Pass fpn_dim
+            )
+        else:
+            raise NotImplementedError("Backbone not supported.")
         
         # alignment branch
         if self.model_type == 'caev2':
@@ -125,9 +136,14 @@ class ContextAutoencoderViT(nn.Module):
         Output shape:
             [bs, num_visible + 1, C]
         '''
-        x_unmasked = self.encoder(x, bool_masked_pos=bool_masked_pos)
+        # ViT-Tiny (B, 98 + 1, 192)
+        if self.encoder_type == "vit":
+            x_unmasked = self.encoder(x, bool_masked_pos=bool_masked_pos)
+        elif self.encoder == "trifuse":
+            x = self.encoder(x)
 
         # encoder to regresser projection
+        # ViT-Tiny (B, 98 + 1, 192) -> (B, 98 + 1, 768)
         if self.encoder_to_regresser is not None:
             x_unmasked = self.encoder_to_regresser(x_unmasked)
             x_unmasked = self.encoder_to_regresser_norm(x_unmasked)
@@ -155,11 +171,14 @@ class ContextAutoencoderViT(nn.Module):
         x_cls_token = x_unmasked[:, :1, :]
         x_unmasked = x_unmasked[:, 1:, :] # remove class token
 
+        # rd_pos_embed = regressor_decoder_pos_embed
         pos_embed = self.rd_pos_embed.expand(batch_size, self.num_patches+1, dim).cuda(x_unmasked.device)
         pos_embed_masked = pos_embed[:,1:][bool_masked_pos].reshape(batch_size, -1, dim)  # pos embed for masked patches
         pos_embed_unmasked = pos_embed[:,1:][~bool_masked_pos].reshape(batch_size, -1, dim)  # pos embed for unmasked patches
 
         num_masked_patches = self.num_patches - (num_visible_plus1-1)
+        
+        # x_masked are queries
         x_masked = self.mask_token.expand(batch_size, num_masked_patches, -1) # masked embedding 
         
         '''
@@ -184,7 +203,21 @@ class ContextAutoencoderViT(nn.Module):
         return logits, latent_predict, latent_target
 
 @register_model
+def cae_tiny_trifuse(pretrained=False, **kwargs):
+    model = ContextAutoencoderViT(
+        patch_size=16, embed_dim=192, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), vocab_size=8192, **kwargs)
+    model.default_cfg = _cfg()
+    if pretrained:
+        checkpoint = torch.load(
+            kwargs["init_ckpt"], map_location="cpu"
+        )
+        model.load_state_dict(checkpoint["model"])
+    return model
+
+@register_model
 def cae_tiny_patch16_224_8k_vocab(pretrained=False, **kwargs):
+    kwargs["encoder"] = "vit"
     model = ContextAutoencoderViT(
         patch_size=16, embed_dim=192, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), vocab_size=8192, **kwargs)

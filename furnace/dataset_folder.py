@@ -5,6 +5,7 @@ from PIL import Image
 import os
 import os.path
 import random
+import torch
 from typing import Any, Callable, cast, Dict, List, Optional, Tuple
 
 
@@ -236,3 +237,91 @@ class ImageFolder(DatasetFolder):
                                           target_transform=target_transform,
                                           is_valid_file=is_valid_file)
         self.imgs = self.samples
+
+class DummyImageFolder:
+    """
+    A dummy dataset class mimicking torchvision.datasets.ImageFolder.
+    Generates dummy PIL Images instead of loading from disk.
+
+    Args:
+        root (string): Root directory path (ignored, but kept for compatibility).
+        num_classes (int): Number of dummy classes to create.
+        samples_per_class (int): Number of dummy samples per class.
+        image_size (Tuple[int, int]): The size (width, height) of the dummy PIL image.
+        transform (callable, optional): A function/transform to apply to the dummy PIL Image.
+        target_transform (callable, optional): A function/transform to apply to the target index.
+
+     Attributes:
+        classes (list): List of the dummy class names.
+        class_to_idx (dict): Dict with items (class_name, class_index).
+        samples (list): List of (dummy_id, class_index) tuples.
+        targets (list): The class_index value for each dummy sample.
+        image_size (Tuple[int, int]): The size (width, height) of the dummy PIL image.
+    """
+    def __init__(
+            self,
+            root: str, # Ignored, but kept for compatibility
+            num_classes: int = 2,
+            samples_per_class: int = 10,
+            image_size: Tuple[int, int] = (224, 224), # (Width, Height) for PIL Image
+            transform: Optional[Callable] = None,
+            target_transform: Optional[Callable] = None,
+    ) -> None:
+        # super().__init__() # Not strictly necessary as we don't inherit VisionDataset
+        self.root = root # Store it even if unused
+        self.transform = transform
+        self.target_transform = target_transform
+        # Ensure image_size is a tuple
+        if isinstance(image_size, int):
+            self.image_size = (image_size, image_size)
+        else:
+            self.image_size = image_size
+
+        # Create dummy classes and mapping
+        self.classes = [f"class_{i}" for i in range(num_classes)]
+        self.class_to_idx = {cls_name: i for i, cls_name in enumerate(self.classes)}
+
+        # Create dummy samples (dummy_id, class_index)
+        self.samples = []
+        for class_idx in range(num_classes):
+            for i in range(samples_per_class):
+                # Using a simple identifier like (class_idx, sample_idx_in_class)
+                dummy_id = (class_idx, i)
+                self.samples.append((dummy_id, class_idx))
+
+        # Create targets list
+        self.targets = [s[1] for s in self.samples]
+
+        # Mimic ImageFolder attribute name for samples
+        self.imgs = self.samples
+
+    def __getitem__(self, index: int) -> Tuple[Any, Any]:
+        """
+        Args:
+            index (int): Index
+
+        Returns:
+            tuple: (sample, target) where sample is a dummy PIL Image (potentially transformed)
+                   and target is the class_index (potentially transformed).
+        """
+        # Get the target index for the requested sample
+        _dummy_id, target = self.samples[index] # We don't need the dummy_id here
+
+        # Create a dummy PIL Image (e.g., grey background)
+        # Mode 'RGB', size (width, height), color (grey)
+        sample = Image.new('RGB', self.image_size, color=(128, 128, 128))
+
+        # Apply transforms if they exist (expecting PIL Image input)
+        if self.transform is not None:
+            sample = self.transform(sample)
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        return sample, target
+
+    def __len__(self) -> int:
+        """
+        Returns:
+            int: Total number of dummy samples.
+        """
+        return len(self.samples)

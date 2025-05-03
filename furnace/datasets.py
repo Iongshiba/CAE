@@ -10,7 +10,7 @@ from timm.data import create_transform
 
 from dall_e.utils import map_pixels
 from furnace.masking_generator import MaskingGenerator, RandomMaskingGenerator
-from furnace.dataset_folder import ImageFolder
+from furnace.dataset_folder import ImageFolder, DummyImageFolder
 
 
 class DataAugmentationForCAE(object):
@@ -98,7 +98,7 @@ class DataAugmentationForCAE(object):
 def build_cae_pretraining_dataset(args):
     transform = DataAugmentationForCAE(args)
     print("Data Aug = %s" % str(transform))
-    return ImageFolder(args.data_path, transform=transform)
+    return DummyImageFolder(args.data_path, transform=transform)
 
 
 def build_dataset(is_train, args):

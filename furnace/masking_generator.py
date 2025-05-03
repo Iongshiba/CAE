@@ -8,9 +8,13 @@ class MaskingGenerator:
             min_aspect=0.3, max_aspect=None):
         if not isinstance(input_size, tuple):
             input_size = (input_size, ) * 2
+        # (16, 16)
         self.height, self.width = input_size
 
+        # 16 x 16
         self.num_patches = self.height * self.width
+
+        # 98
         self.num_masking_patches = num_masking_patches
 
         self.min_num_patches = min_num_patches
