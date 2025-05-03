@@ -8,7 +8,6 @@ from models.modeling_finetune import _cfg
 from timm.models.registry import register_model
 from timm.models.layers import trunc_normal_ as __call_trunc_normal_
 from models.modeling_cae_helper import *
-from models.trifuse import TriFuse
 
 def trunc_normal_(tensor, mean=0., std=1.):
     __call_trunc_normal_(tensor, mean=mean, std=std, a=-std, b=std)
@@ -37,11 +36,7 @@ class ContextAutoencoderViT(nn.Module):
                     drop_rate=drop_rate, attn_drop_rate=attn_drop_rate, drop_path_rate=drop_path_rate,
                     norm_layer=norm_layer, init_values=init_values, attn_head_dim=attn_head_dim, init_std=init_std)
         elif self.encoder_type == "trifuse":
-            self.encoder = TriFuse(
-                depths=(2, 2, 2, 2),
-                conv_depths=(2, 2, 2, 2),
-                fpn_dim=192,  # Pass fpn_dim
-            )
+            self.encoder = TriFuseEncoder(depths=(2, 2, 2), conv_depths=(2, 2, 2), fpn_dim=192)
         else:
             raise NotImplementedError("Backbone not supported.")
         
@@ -56,8 +51,7 @@ class ContextAutoencoderViT(nn.Module):
                     norm_layer=norm_layer, init_values=init_values, attn_head_dim=attn_head_dim, init_std=init_std)
         
         self.init_std = init_std
-        self.num_patches = self.encoder.patch_embed.num_patches
-
+        self.num_patches = self.encoder.num_patches
         
         # from encoder to regresser projection, borrowed from mae.
         if decoder_embed_dim != embed_dim:
@@ -136,11 +130,11 @@ class ContextAutoencoderViT(nn.Module):
         Output shape:
             [bs, num_visible + 1, C]
         '''
-        # ViT-Tiny (B, 98 + 1, 192)
-        if self.encoder_type == "vit":
-            x_unmasked = self.encoder(x, bool_masked_pos=bool_masked_pos)
-        elif self.encoder == "trifuse":
-            x = self.encoder(x)
+        # ViT-Tiny
+        # (B, 98 + 1, 192)
+        # TriFuse-Tiny
+        # (B, 14, 14, 192)
+        x_unmasked = self.encoder(x, bool_masked_pos=bool_masked_pos)
 
         # encoder to regresser projection
         # ViT-Tiny (B, 98 + 1, 192) -> (B, 98 + 1, 768)
@@ -204,6 +198,7 @@ class ContextAutoencoderViT(nn.Module):
 
 @register_model
 def cae_tiny_trifuse(pretrained=False, **kwargs):
+    kwargs["encoder"] = "trifuse"
     model = ContextAutoencoderViT(
         patch_size=16, embed_dim=192, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), vocab_size=8192, **kwargs)

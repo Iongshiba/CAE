@@ -49,7 +49,8 @@ def get_args():
     # Model parameters
     parser.add_argument(
         "--model",
-        default="cae_tiny_patch16_224_8k_vocab",
+        # default="cae_tiny_patch16_224_8k_vocab",
+        default="cae_tiny_trifuse",
         type=str,
         metavar="MODEL",
         help="Name of model to train",
@@ -365,7 +366,7 @@ def main(args):
     cudnn.benchmark = True
 
     model = get_model(args)
-    patch_size = model.encoder.patch_embed.patch_size
+    patch_size = model.encoder.patch_size
     print("Patch size = %s" % str(patch_size))
     args.window_size = (
         args.input_size // patch_size[0],
@@ -525,7 +526,7 @@ def main(args):
 
 
 if __name__ == "__main__":
-    opts = get_args()
+    opts = get_args() 
     if opts.output_dir:
         Path(opts.output_dir).mkdir(parents=True, exist_ok=True)
     main(opts)

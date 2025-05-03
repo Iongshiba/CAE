@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from models.trifuse import TriFuse
 from models.modeling_finetune import PatchEmbed, DropPath, Mlp
 from timm.models.layers import trunc_normal_ as __call_trunc_normal_
 
@@ -201,6 +202,7 @@ class VisionTransformerEncoder(nn.Module):
             img_size=img_size, patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim)
         num_patches = self.patch_embed.num_patches
         self.num_patches = num_patches
+        self.patch_size = patch_size
 
         # generate class token and pos embed
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
@@ -304,6 +306,58 @@ class VisionTransformerEncoder(nn.Module):
         x = self.forward_features(x, bool_masked_pos=bool_masked_pos)
         return x
 
+class TriFuseEncoder(nn.Module):
+    def __init__(self, img_size=224, depths=(2, 2, 2, 2), conv_depths=(2, 2, 2, 2), fpn_dim=192):
+        super().__init__()
+        self.trifuse = TriFuse(
+                depths=depths,
+                conv_depths=conv_depths,
+                fpn_dim=fpn_dim,  # Pass fpn_dim
+            )
+        # (224, 224) -> (14, 14) final out of HFF
+        self.patch_size = (2 ** (len(depths) + 1), ) * 2
+        self.patch_shape = (img_size // 2 ** (len(depths) + 1), ) * 2
+        self.num_patches = self.patch_shape[0] * self.patch_shape[1]
+        
+        self.avg_pool = nn.AvgPool2d(kernel_size=self.patch_shape, stride=1)
+        
+    def build_2d_sincos_position_embedding(self, embed_dim=768, temperature=10000., use_cls_token=False):
+        h, w = self.patch_shape
+        grid_w = torch.arange(w, dtype=torch.float32)
+        grid_h = torch.arange(h, dtype=torch.float32)
+        grid_w, grid_h = torch.meshgrid(grid_w, grid_h)
+        assert embed_dim % 4 == 0, 'Embed dimension must be divisible by 4 for 2D sin-cos position embedding'
+        pos_dim = embed_dim // 4
+        omega = torch.arange(pos_dim, dtype=torch.float32) / pos_dim
+        omega = 1. / (temperature ** omega)
+        out_w = torch.einsum('m,d->md', [grid_w.flatten(), omega])
+        out_h = torch.einsum('m,d->md', [grid_h.flatten(), omega])
+        pos_emb = torch.cat([torch.sin(out_w), torch.cos(out_w), torch.sin(out_h), torch.cos(out_h)], dim=1)[None, :, :]
+
+        if not use_cls_token:
+            pos_embed = nn.Parameter(pos_emb)
+        else:
+            pe_token = torch.zeros([1, 1, embed_dim], dtype=torch.float32)
+            pos_embed = nn.Parameter(torch.cat([pe_token, pos_emb], dim=1))
+        pos_embed.requires_grad = False
+        return pos_embed
+    
+    def forward_features(self, x, bool_masked_pos):
+        feat_map = self.trifuse(x)
+
+        batch_size, dim, w, h = feat_map.size()
+
+        cls_tokens = self.avg_pool(feat_map).reshape(batch_size, 1, dim)
+        x_ = feat_map.flatten(2, -1).permute(0, 2, 1)
+
+        x_unmasked = x_[~bool_masked_pos].reshape(batch_size, -1, dim)
+        x_unmasked = torch.cat((cls_tokens, x_unmasked), dim=1)
+
+        return x_unmasked
+    
+    def forward(self, x, bool_masked_pos):
+        x = self.forward_features(x, bool_masked_pos=bool_masked_pos)
+        return x
 '''
 Latent context regressor that regresses masked representation 
 from unmasked representation using cross attention
