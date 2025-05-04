@@ -1,4 +1,5 @@
 from torchvision.datasets.vision import VisionDataset
+from torchvision.datasets import CocoDetection
 
 from PIL import Image
 
@@ -62,7 +63,6 @@ def make_dataset(
                     item = path, class_index
                     instances.append(item)
     return instances
-
 
 class DatasetFolder(VisionDataset):
     """A generic data loader where the samples are arranged in this way: ::
@@ -324,4 +324,33 @@ class DummyImageFolder:
         Returns:
             int: Total number of dummy samples.
         """
+        return len(self.samples)
+    
+class MyDataset(VisionDataset):
+    def __init__(self,
+            root: str,
+            loader: Callable[[str], Any] = default_loader,
+            transform: Optional[Callable] = None,
+            target_transform: Optional[Callable] = None,):
+        super().__init__(root, transform=transform, target_transform=target_transform)
+
+        self.samples = [os.path.join(root, img_name) for img_name in os.listdir(root)]
+        self.loader = loader
+
+    def __getitem__(self, index: int) -> Tuple[Any, Any]:
+        while True:
+            try:
+                path = self.samples[index]
+                sample = self.loader(path)
+                break
+            except Exception as e:
+                print(e)
+                index = random.randint(0, len(self.samples) - 1)
+
+        if self.transform is not None:
+            sample = self.transform(sample)
+
+        return sample, 1 # dummy target
+
+    def __len__(self) -> int:
         return len(self.samples)
