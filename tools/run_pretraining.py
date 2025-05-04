@@ -366,11 +366,6 @@ def main(args):
 
     cudnn.benchmark = True
 
-    logger = None
-    if utils.is_main_process():
-        wandb.login()
-        logger = wandb.init(project=args.exp_name, config=args)
-
     model = get_model(args)
     patch_size = model.encoder.patch_size
     print("Patch size = %s" % str(patch_size))
@@ -406,6 +401,11 @@ def main(args):
         print("Sampler_train = %s" % str(sampler_train))
     else:
         sampler_train = torch.utils.data.RandomSampler(dataset_train)
+
+    logger = None
+    if global_rank == 0:
+        wandb.login()
+        logger = wandb.init(project=args.exp_name, config=args)
 
     if global_rank == 0 and args.log_dir is not None:
         os.makedirs(args.log_dir, exist_ok=True)
@@ -500,7 +500,7 @@ def main(args):
             wd_schedule_values=wd_schedule_values,
             args=args,
         )
-        if utils.is_main_process() and logger is not None:
+        if global_rank == 0 and logger is not None:
             logger.log(train_stats)
 
         if args.output_dir:
