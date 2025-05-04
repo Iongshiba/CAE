@@ -390,6 +390,7 @@ def main(args):
     if True:  # args.distributed:
         num_tasks = utils.get_world_size()
         global_rank = utils.get_rank()
+        print(global_rank)
         sampler_rank = global_rank
         num_training_steps_per_epoch = (
             len(dataset_train) // args.batch_size // num_tasks
@@ -403,7 +404,7 @@ def main(args):
         sampler_train = torch.utils.data.RandomSampler(dataset_train)
 
     logger = None
-    if global_rank == 0:
+    if utils.is_main_process():
         wandb.login()
         logger = wandb.init(project=args.exp_name, config=args)
 
