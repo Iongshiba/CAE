@@ -13,6 +13,7 @@ import time
 import torch
 import torch.backends.cudnn as cudnn
 import json
+import wandb
 
 from pathlib import Path
 
@@ -365,6 +366,11 @@ def main(args):
 
     cudnn.benchmark = True
 
+    logger = None
+    if utils.is_main_process():
+        wandb.login()
+        logger = wandb.init(project=args.exp_name, config=args)
+
     model = get_model(args)
     patch_size = model.encoder.patch_size
     print("Patch size = %s" % str(patch_size))
@@ -494,6 +500,9 @@ def main(args):
             wd_schedule_values=wd_schedule_values,
             args=args,
         )
+        if utils.is_main_process() and logger is not None:
+            logger.log(train_stats)
+
         if args.output_dir:
             if (epoch + 1) % args.save_ckpt_freq == 0 or epoch + 1 == args.epochs:
                 utils.save_model(
