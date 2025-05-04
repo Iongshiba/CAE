@@ -34,8 +34,8 @@ def get_args():
         help="select model type",
         choices=["cae", "caev2"],
     )
-    parser.add_argument("--batch_size", default=1, type=int)
-    parser.add_argument("--epochs", default=300, type=int)
+    parser.add_argument("--batch_size", default=8, type=int)
+    parser.add_argument("--epochs", default=30, type=int)
     parser.add_argument("--save_ckpt_freq", default=50, type=int)
     parser.add_argument("--discrete_vae_weight_path", default=r"C:\Users\trand\longg\document\selfstudy\CAE\clip_model", type=str)
     parser.add_argument(
@@ -75,7 +75,7 @@ def get_args():
     parser.add_argument(
         "--drop_path",
         type=float,
-        default=0,
+        default=0.1,
         metavar="PCT",
         help="Drop path rate (default: 0)",
     )
@@ -106,7 +106,7 @@ def get_args():
     parser.add_argument(
         "--clip_grad",
         type=float,
-        default=None,
+        default=3.0,
         metavar="NORM",
         help="Clip gradient norm (default: None, no clipping)",
     )
@@ -132,7 +132,7 @@ def get_args():
     parser.add_argument(
         "--lr",
         type=float,
-        default=5e-4,
+        default=1.5e-3,
         metavar="LR",
         help="learning rate (default: 5e-4)",
     )
@@ -154,7 +154,7 @@ def get_args():
     parser.add_argument(
         "--warmup_epochs",
         type=int,
-        default=5,
+        default=10,
         metavar="N",
         help="epochs to warmup LR, if scheduler supports",
     )
@@ -176,19 +176,19 @@ def get_args():
     parser.add_argument(
         "--second_interpolation",
         type=str,
-        default="lanczos",
+        default="bicubic",
         help='Interpolation for discrete vae (random, bilinear, bicubic default: "lanczos")',
     )
 
     # Dataset parameters
     parser.add_argument(
         "--data_path",
-        default="/datasets01/imagenet_full_size/061417/",
+        default=r"D:\Dataset\doclaynet\doclaynet_original\PNG",
         type=str,
         help="dataset path",
     )
     parser.add_argument(
-        "--imagenet_default_mean_and_std", default=False, action="store_true"
+        "--imagenet_default_mean_and_std", default=True, action="store_true"
     )
 
     parser.add_argument(
@@ -241,7 +241,7 @@ def get_args():
     """
     # crop size
     parser.add_argument(
-        "--crop_min_size", type=float, default=0.08, help="min size of crop"
+        "--crop_min_size", type=float, default=0.4, help="min size of crop"
     )
     parser.add_argument(
         "--crop_max_size", type=float, default=1.0, help="max size of crop"
@@ -250,7 +250,7 @@ def get_args():
     parser.add_argument(
         "--color_jitter",
         type=float,
-        default=0,
+        default=0.4,
         metavar="PCT",
         help="Color jitter factor (default: 0)",
     )
@@ -264,7 +264,7 @@ def get_args():
     # 1. if use block mask, set the num_mask_patches
     parser.add_argument(
         "--num_mask_patches",
-        default=98,
+        default=30,
         type=int,
         help="number of the visual tokens/patches need be masked",
     )
@@ -279,14 +279,14 @@ def get_args():
     CAE hyper-parameters
     """
     parser.add_argument(
-        "--regressor_depth", default=4, type=int, help="depth of the regressor"
+        "--regressor_depth", default=1, type=int, help="depth of the regressor"
     )
     parser.add_argument(
-        "--decoder_depth", default=4, type=int, help="depth of the decoder"
+        "--decoder_depth", default=0, type=int, help="depth of the decoder"
     )
     parser.add_argument(
         "--decoder_embed_dim",
-        default=768,
+        default=96,
         type=int,
         help="dimensionaltiy of embeddings for decoder",
     )
@@ -316,13 +316,13 @@ def get_args():
     parser.add_argument(
         "--align_loss_weight",
         type=float,
-        default=2,
+        default=0,
         help="loss weight for the alignment constraint",
     )
     parser.add_argument(
         "--latent_alignment_loss_weight",
         type=float,
-        default=0,
+        default=1,
         help="loss weight for visible and masked latent alignment in CAE v2",
     )
 
